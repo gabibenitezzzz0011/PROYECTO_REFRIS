@@ -445,4 +445,4 @@ Este proyecto está licenciado bajo la licencia MIT.
 
 Para obtener ayuda o reportar problemas:
 - Abrir un issue en el repositorio
-- Contactar al equipo de mantenimiento en soporte@ejemplo.com 
+- Contactar al equipo de mantenimiento en gabibenitezzz003@gmail.com 
