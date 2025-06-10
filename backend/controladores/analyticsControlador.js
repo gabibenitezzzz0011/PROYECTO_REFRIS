@@ -11,9 +11,9 @@ exports.obtenerKPIsGenerales = async (req, res) => {
         
         if (req.query.fecha) {
             try {
-                const fechaObj = parseISO(req.query.fecha);
-                mes = fechaObj.getMonth() + 1;
-                anio = fechaObj.getFullYear();
+            const fechaObj = parseISO(req.query.fecha);
+            mes = fechaObj.getMonth() + 1;
+            anio = fechaObj.getFullYear();
             } catch (error) {
                 console.warn('[Analytics] Error al parsear fecha:', error);
             }
@@ -59,8 +59,8 @@ exports.obtenerKPIsGenerales = async (req, res) => {
 
         distribucionRefrigerios.forEach(item => {
             if (item && item._id && item._id.hora) {
-                const hora = parseInt(item._id.hora);
-                if (!isNaN(hora) && hora >= 0 && hora < 24) {
+            const hora = parseInt(item._id.hora);
+            if (!isNaN(hora) && hora >= 0 && hora < 24) {
                     distribucionPorHora[hora][item._id.tipo || 'PRINCIPAL'] = item.count;
                 }
             }
@@ -129,13 +129,13 @@ exports.obtenerTendencias = async (req, res) => {
 
         tendenciaMensual.forEach(item => {
             if (item && item._id) {
-                const index = item._id - 1;
-                if (index >= 0 && index < 12) {
-                    datosTendencia[index].totalTurnos = item.totalTurnos;
-                    datosTendencia[index].conRefrigerios = item.conRefrigerios;
-                    datosTendencia[index].eficiencia = item.totalTurnos > 0 
-                        ? Math.round((item.conRefrigerios / item.totalTurnos) * 100) 
-                        : 0;
+            const index = item._id - 1;
+            if (index >= 0 && index < 12) {
+                datosTendencia[index].totalTurnos = item.totalTurnos;
+                datosTendencia[index].conRefrigerios = item.conRefrigerios;
+                datosTendencia[index].eficiencia = item.totalTurnos > 0 
+                    ? Math.round((item.conRefrigerios / item.totalTurnos) * 100) 
+                    : 0;
                 }
             }
         });
@@ -253,9 +253,9 @@ exports.obtenerAnalisisEficiencia = async (req, res) => {
             { $unwind: "$refrigerios" },
             { 
                 $group: {
-                    _id: { 
+                _id: { 
                         hora: { $substr: ["$refrigerios.horario.inicio", 0, 2] }
-                    },
+                }, 
                     PRINCIPAL: {
                         $sum: { $cond: [{ $eq: ["$refrigerios.tipo", "PRINCIPAL"] }, 1, 0] }
                     },
@@ -266,19 +266,19 @@ exports.obtenerAnalisisEficiencia = async (req, res) => {
                         $sum: { $cond: [{ $eq: ["$refrigerios.tipo", "ADICIONAL"] }, 1, 0] }
                     },
                     duracionTotal: {
-                        $sum: {
-                            $cond: [
-                                { $and: [
-                                    { $ne: ["$refrigerios.horario.inicio", null] },
-                                    { $ne: ["$refrigerios.horario.fin", null] }
-                                ]},
+                    $sum: {
+                        $cond: [
+                            { $and: [
+                                { $ne: ["$refrigerios.horario.inicio", null] },
+                                { $ne: ["$refrigerios.horario.fin", null] }
+                            ]},
                                 { $subtract: [
                                     { $toDate: { $concat: ["$fecha", "T", "$refrigerios.horario.fin", ":00"] } },
                                     { $toDate: { $concat: ["$fecha", "T", "$refrigerios.horario.inicio", ":00"] } }
                                 ]},
                                 0
-                            ]
-                        }
+                        ]
+                    }
                     },
                     count: { $sum: 1 }
                 }
@@ -295,14 +295,14 @@ exports.obtenerAnalisisEficiencia = async (req, res) => {
                             { $eq: ["$count", 0] },
                             0,
                             { $divide: [{ $divide: ["$duracionTotal", 60000] }, "$count"] }
-                        ]
+                    ]
                     },
                     total: { $add: ["$PRINCIPAL", "$COMPENSATORIO", "$ADICIONAL"] }
                 }
             },
             { $sort: { hora: 1 } }
         ]) || [];
-
+        
         // Completar datos para todas las horas (0-23)
         const horasCompletas = Array(24).fill(0).map((_, i) => ({
             hora: i,

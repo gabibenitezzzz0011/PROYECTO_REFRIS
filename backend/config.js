@@ -22,9 +22,12 @@ const config = {
     jwtSecret: process.env.JWT_SECRET || 'tu-secreto-jwt-super-seguro',
     jwtExpiration: '24h',
     cors: {
-      origin: process.env.CORS_ORIGIN || '*',
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-      allowedHeaders: ['Content-Type', 'Authorization']
+      origin: process.env.CORS_ORIGIN || (env === 'production' ? 'https://tudominio.com' : 'http://localhost:3000'),
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+      credentials: true,
+      preflightContinue: false,
+      optionsSuccessStatus: 204
     }
   },
 

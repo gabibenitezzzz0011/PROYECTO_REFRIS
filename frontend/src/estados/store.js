@@ -2,15 +2,17 @@ import { create } from 'zustand';
 import axios from 'axios';
 
 // Definimos la URL fija de la API del backend
-// Asegurarnos que la URL es correcta y está completa
-const API_URL = 'http://localhost:4000/api';
+// Usar proxy configurado en package.json o una URL de la API configurada en variables de entorno
+const API_URL = process.env.REACT_APP_API_URL || '/api';
 
 // Agregar autorización a todas las solicitudes de Axios
 axios.interceptors.request.use(
   config => {
-    // Podemos omitir el token por ahora durante las pruebas
-    // Nota: En un entorno de producción, este token debería venir de un sistema de autenticación
-    config.headers['Authorization'] = 'Bearer test-token';
+    // Obtener el token del localStorage si existe
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
     return config;
   },
   error => {
@@ -19,11 +21,21 @@ axios.interceptors.request.use(
 );
 
 // Configuración global de Axios para timeout y reintentos
-axios.defaults.timeout = 10000; // 10 segundos
-axios.interceptors.response.use(null, error => {
-  console.error('Axios error interceptor:', error);
-  return Promise.reject(error);
-});
+axios.defaults.timeout = 15000; // 15 segundos
+axios.interceptors.response.use(
+  response => response,
+  error => {
+    console.error('Axios error interceptor:', error);
+    
+    // Si el error es de autenticación (401), limpiar el token y redirigir al login
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('authToken');
+      window.location.href = '/login';
+    }
+    
+    return Promise.reject(error);
+  }
+);
 
 export const useStore = create((set, get) => ({
   asesores: [], // Estado inicial: lista vacía de asesores

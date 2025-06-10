@@ -59,4 +59,11 @@ afterAll(() => {
   console.log = originalConsoleLog;
   console.warn = originalConsoleWarn;
   console.error = originalConsoleError;
+});
+
+// Test simple para evitar que el archivo falle por no tener tests
+describe('Configuración de pruebas', () => {
+  it('debería configurar correctamente el entorno de pruebas', () => {
+    expect(mongoose.connection.readyState).toBe(1); // 1 significa conectado
+  });
 }); 

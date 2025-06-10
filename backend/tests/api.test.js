@@ -1,5 +1,6 @@
 const request = require('supertest');
 const app = require('../server');
+const config = require('../config');
 
 // Mock para el modelo Turno
 jest.mock('../modelos/Turno', () => {
@@ -56,6 +57,25 @@ describe('API Tests', () => {
       expect(response.body).toHaveProperty('message');
       expect(response.body).toHaveProperty('serverTime');
     });
+    
+    it('debería tener las cabeceras CORS correctas', async () => {
+      const origin = config.env === 'production' 
+        ? 'https://tudominio.com' 
+        : 'http://localhost:3000';
+        
+      const response = await request(app)
+        .get('/api/status')
+        .set('Origin', origin)
+        .expect(200);
+      
+      // Verificar cabeceras CORS
+      expect(response.headers).toHaveProperty('access-control-allow-origin', origin);
+      expect(response.headers).toHaveProperty('access-control-allow-credentials', 'true');
+      // Verificar si existe la cabecera de métodos, pero no es requerida para solicitudes simples GET
+      if (response.headers['access-control-allow-methods']) {
+        expect(response.headers['access-control-allow-methods']).toContain('GET');
+      }
+    });
   });
   
   // Test de endpoint raíz
@@ -81,6 +101,27 @@ describe('API Tests', () => {
         .expect(404);
       
       expect(response.body).toHaveProperty('error', 'Ruta no encontrada');
+    });
+  });
+  
+  // Test de preflight CORS OPTIONS
+  describe('CORS Preflight', () => {
+    it('debería manejar correctamente una solicitud OPTIONS preflight', async () => {
+      const origin = config.env === 'production' 
+        ? 'https://tudominio.com' 
+        : 'http://localhost:3000';
+        
+      const response = await request(app)
+        .options('/api/status')
+        .set('Origin', origin)
+        .set('Access-Control-Request-Method', 'GET')
+        .set('Access-Control-Request-Headers', 'Content-Type,Authorization')
+        .expect(204); // Status 204 para OPTIONS preflight exitoso
+      
+      // Verificar cabeceras CORS en respuesta preflight
+      expect(response.headers).toHaveProperty('access-control-allow-origin', origin);
+      expect(response.headers).toHaveProperty('access-control-allow-methods');
+      expect(response.headers).toHaveProperty('access-control-allow-headers');
     });
   });
 }); 

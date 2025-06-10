@@ -43,6 +43,15 @@ proyecto-refrigerios/
 
 ## Instalación
 
+### Instalación Completa
+
+Para instalar todas las dependencias del proyecto (backend y frontend):
+
+```bash
+# Instalar todas las dependencias
+npm run install:all
+```
+
 ### Backend
 
 ```bash
@@ -57,7 +66,93 @@ cd frontend
 npm install
 ```
 
-### Pruebas Automatizadas
+## Configuración del Entorno
+
+### Variables de Entorno
+
+Crea un archivo `.env` en la raíz del proyecto para configurar variables críticas:
+
+```
+# Configuración general
+NODE_ENV=development
+PORT=4000
+
+# Base de datos
+MONGODB_URI=mongodb://localhost:27017/control-callcenter
+
+# Seguridad
+JWT_SECRET=tu-clave-secreta-fuerte-y-aleatoria
+CORS_ORIGIN=http://localhost:3000
+
+# API de Gemini
+GEMINI_API_KEY=tu-api-key-de-gemini
+```
+
+### Base de datos
+
+El sistema utiliza MongoDB. Asegúrate de tener una instancia de MongoDB en ejecución y configura la conexión en `backend/config.js`.
+
+Para preparar la base de datos puedes ejecutar:
+
+```bash
+# En Windows
+preparar_base_datos.bat
+
+# En Linux/Mac
+cd backend
+node utilidades/prepararBaseDatos.js
+```
+
+Este script verificará:
+- La conexión a MongoDB
+- La creación de índices necesarios
+- La existencia de un usuario administrador
+- Estadísticas básicas de la base de datos
+
+### API de Gemini
+
+Para utilizar la integración con Google Gemini, necesitas:
+
+1. Una API key de Google Gemini
+2. Configurarla en el archivo `.env` como `GEMINI_API_KEY=tu-api-key`
+
+Para obtener una API key:
+1. Visita [Google AI Studio](https://ai.google.dev/)
+2. Crea una cuenta o inicia sesión
+3. Genera una API key en la sección de API Keys
+
+El sistema utiliza el modelo `gemini-2.5-pro-exp-03-25`, la versión experimental de Gemini 2.5 Pro, que ofrece capacidades avanzadas de análisis de datos y procesamiento de texto con una cuota gratuita disponible.
+
+## Ejecución
+
+### Desarrollo
+
+Para ejecutar el proyecto completo en modo desarrollo:
+
+```bash
+# Inicia tanto el backend como el frontend
+npm run dev
+```
+
+### Solo Backend
+
+```bash
+cd backend
+npm run dev
+```
+
+El servidor se ejecutará en http://localhost:4000 por defecto.
+
+### Solo Frontend
+
+```bash
+cd frontend
+npm start
+```
+
+La aplicación se ejecutará en http://localhost:3000 por defecto.
+
+## Pruebas Automatizadas
 
 El sistema incluye un conjunto completo de pruebas automatizadas para validar el funcionamiento de las APIs:
 
@@ -126,63 +221,6 @@ Para configurar el despliegue, es necesario definir los siguientes secretos en G
 - `DEPLOY_KEY`: Clave SSH para la autenticación
 - `DEPLOY_PATH`: Ruta absoluta en el servidor donde se desplegará la aplicación
 
-## Configuración
-
-### Base de datos
-
-El sistema utiliza MongoDB. Asegúrate de tener una instancia de MongoDB en ejecución y configura la conexión en `backend/config.js`.
-
-Para preparar la base de datos puedes ejecutar:
-
-```bash
-# En Windows
-preparar_base_datos.bat
-
-# En Linux/Mac
-cd backend
-node utilidades/prepararBaseDatos.js
-```
-
-Este script verificará:
-- La conexión a MongoDB
-- La creación de índices necesarios
-- La existencia de un usuario administrador
-- Estadísticas básicas de la base de datos
-
-### API de Gemini
-
-Para utilizar la integración con Google Gemini, necesitas:
-
-1. Una API key de Google Gemini
-2. Configurarla en el archivo `backend/servicios/geminiService.js`
-
-Para obtener una API key:
-1. Visita [Google AI Studio](https://ai.google.dev/)
-2. Crea una cuenta o inicia sesión
-3. Genera una API key en la sección de API Keys
-
-El sistema utiliza el modelo `gemini-2.5-pro-exp-03-25`, la versión experimental de Gemini 2.5 Pro, que ofrece capacidades avanzadas de análisis de datos y procesamiento de texto con una cuota gratuita disponible.
-
-## Ejecución
-
-### Backend
-
-```bash
-cd backend
-npm start
-```
-
-El servidor se ejecutará en http://localhost:4000 por defecto.
-
-### Frontend
-
-```bash
-cd frontend
-npm start
-```
-
-La aplicación se ejecutará en http://localhost:3000 por defecto.
-
 ## Formatos de Archivos Soportados
 
 El sistema soporta dos formatos de archivos:
@@ -226,7 +264,32 @@ El sistema ofrece dos métodos para procesar los archivos de dimensionamiento:
 - Análisis detallado de los datos procesados
 - Recomendaciones para optimizar la asignación de refrigerios
 
-## Problemas comunes
+## Solución de Problemas
+
+### Problemas de Conexión con el Backend
+
+Si el frontend no puede conectar con el backend, verifique:
+
+1. **Servidor backend activo**: Asegúrese de que el servidor backend esté en ejecución
+2. **Configuración de puertos**: Verifique que el backend esté ejecutándose en el puerto esperado (4000 por defecto)
+3. **Configuración CORS**: Asegúrese de que la configuración CORS en el backend permita conexiones desde el origen del frontend
+4. **Proxy de desarrollo**: Verifique que el proxy en `package.json` del frontend apunte al backend correctamente
+5. **Firewall/Antivirus**: Compruebe que su firewall o antivirus no esté bloqueando las conexiones
+
+Para solucionar problemas de red:
+```bash
+# Verificar si el puerto está en uso
+netstat -ano | findstr :4000
+```
+
+### Errores al Subir Archivos
+
+Si encuentra problemas al cargar archivos CSV/Excel:
+
+1. **Formato de archivo**: Asegúrese de que el formato del archivo sea correcto (delimitador `;`, codificación UTF-8)
+2. **Tamaño de archivo**: El límite predeterminado es de 10MB. Para archivos más grandes, ajuste el límite en `backend/middleware/upload.js`
+3. **Permisos de directorio**: Verifique que el directorio `backend/uploads` tenga permisos de escritura
+4. **Caracteres especiales**: Asegúrese de que no haya caracteres especiales en los nombres de los archivos
 
 ### Límites de la API de Gemini
 
@@ -234,21 +297,152 @@ Si recibes errores como "429 Too Many Requests", significa que posiblemente has 
 
 El sistema utiliza el modelo experimental `gemini-2.5-pro-exp-03-25` que ofrece una cuota gratuita para desarrollo y pruebas. Para uso en producción o aplicaciones con mayor volumen de procesamiento, considera actualizar a un plan de pago.
 
-### Problemas con el Formato de Archivos
+### Problemas con MongoDB
 
-Si tienes problemas con el procesamiento de archivos, verifica:
+Si tiene problemas con la conexión a MongoDB:
 
-1. **Formato de columnas**: Asegúrate de que el archivo tenga todas las columnas requeridas
-2. **Delimitador**: Para archivos CSV, usa punto y coma (`;`) como delimitador
-3. **Codificación**: Usa codificación UTF-8 para archivos CSV
-4. **Fechas**: Verifica que las fechas estén en un formato válido (DD/MM/YYYY, YYYY-MM-DD, etc.)
+1. **Servicio activo**: Asegúrese de que MongoDB esté en ejecución
+2. **URL de conexión**: Verifique la URL de conexión en el archivo `.env`
+3. **Autenticación**: Si MongoDB requiere autenticación, asegúrese de incluir las credenciales en la URL de conexión
+4. **Red**: Verifique que no haya restricciones de red que impidan la conexión a MongoDB
+
+Para verificar la conexión:
+```bash
+cd backend
+node -e "const mongoose = require('mongoose'); mongoose.connect('mongodb://localhost:27017/control-callcenter').then(() => console.log('Conexión exitosa')).catch(err => console.error('Error:', err))"
+```
+
+## Guía de Despliegue en Producción
+
+### Preparación
+
+1. **Configurar variables de entorno**:
+   - Crea un archivo `.env.production` con las configuraciones de producción
+   - Incluye `NODE_ENV=production`
+   - Configura una clave JWT segura y específica para producción
+   - Establece los orígenes CORS permitidos
+
+2. **Construir el frontend**:
+   ```bash
+   cd frontend
+   npm run build
+   ```
+
+3. **Optimizar para producción**:
+   - Asegúrate de que la compresión esté habilitada
+   - Configura límites de tasa adecuados
+   - Establece cabeceras de seguridad HTTP
+
+### Opciones de Despliegue
+
+#### 1. Servidor Tradicional
+
+1. **Configurar Nginx como proxy inverso**:
+   ```nginx
+   server {
+     listen 80;
+     server_name tu-dominio.com;
+     
+     # Frontend
+     location / {
+       root /ruta/a/tu/frontend/build;
+       try_files $uri /index.html;
+     }
+     
+     # Backend API
+     location /api {
+       proxy_pass http://localhost:4000;
+       proxy_http_version 1.1;
+       proxy_set_header Upgrade $http_upgrade;
+       proxy_set_header Connection 'upgrade';
+       proxy_set_header Host $host;
+       proxy_cache_bypass $http_upgrade;
+     }
+   }
+   ```
+
+2. **Configurar PM2 para gestionar el proceso Node.js**:
+   ```bash
+   npm install -g pm2
+   cd backend
+   pm2 start server.js --name api-refrigerios
+   pm2 save
+   pm2 startup
+   ```
+
+#### 2. Contenedorización con Docker
+
+1. **Crear Dockerfile para el backend**:
+   ```dockerfile
+   FROM node:16-alpine
+   WORKDIR /app
+   COPY package*.json ./
+   RUN npm install --production
+   COPY . .
+   EXPOSE 4000
+   CMD ["node", "server.js"]
+   ```
+
+2. **Crear docker-compose.yml**:
+   ```yaml
+   version: '3'
+   services:
+     mongodb:
+       image: mongo
+       volumes:
+         - mongo-data:/data/db
+       ports:
+         - "27017:27017"
+     backend:
+       build: ./backend
+       depends_on:
+         - mongodb
+       ports:
+         - "4000:4000"
+       environment:
+         - NODE_ENV=production
+         - MONGODB_URI=mongodb://mongodb:27017/control-callcenter
+         - JWT_SECRET=tu-clave-secreta
+         - CORS_ORIGIN=https://tu-dominio.com
+     frontend:
+       build: ./frontend
+       ports:
+         - "80:80"
+       depends_on:
+         - backend
+   volumes:
+     mongo-data:
+   ```
+
+## Mantenimiento
+
+### Copia de Seguridad
+
+Para realizar copias de seguridad de MongoDB:
+
+```bash
+# Exportar la base de datos
+mongodump --db control-callcenter --out ./backup
+
+# Importar la base de datos
+mongorestore --db control-callcenter ./backup/control-callcenter
+```
+
+### Rotación de Logs
+
+Los logs se almacenan en `error.log` y `combined.log`. Configura una rotación de logs para evitar que crezcan indefinidamente:
+
+```bash
+npm install -g log-rotate
+logrotate -c logrotate.conf
+```
 
 ## Licencia
 
 Este proyecto está licenciado bajo la licencia MIT.
 
-## Contacto
+## Contacto y Soporte
 
-[Tu Nombre] - [Tu Email]
-
-Link del proyecto: [https://github.com/tu-usuario/PROYECTO_REFRIS](https://github.com/tu-usuario/PROYECTO_REFRIS) 
+Para obtener ayuda o reportar problemas:
+- Abrir un issue en el repositorio
+- Contactar al equipo de mantenimiento en soporte@ejemplo.com 

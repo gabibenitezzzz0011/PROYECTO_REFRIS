@@ -10,6 +10,9 @@ const { cache } = require('./middleware/cache');
 const Usuario = require('./modelos/Usuario');
 const path = require('path');
 const { swaggerDocs } = require('./swagger');
+const xss = require('xss');
+const hpp = require('hpp');
+const mongoSanitize = require('express-mongo-sanitize');
 
 // Importar rutas
 const turnoRutas = require('./rutas/turnoRutas');
@@ -23,18 +26,59 @@ const app = express();
 // Confía en el primer proxy (necesario para rate-limit y React en desarrollo)
 app.set('trust proxy', 1);
 
-// Middleware de seguridad
-app.use(helmet());
+// Middleware personalizado para protección XSS
+const xssProtection = (req, res, next) => {
+  if (req.body) {
+    req.body = JSON.parse(xss(JSON.stringify(req.body)));
+  }
+  if (req.query) {
+    Object.keys(req.query).forEach(key => {
+      if (typeof req.query[key] === 'string') {
+        req.query[key] = xss(req.query[key]);
+      }
+    });
+  }
+  next();
+};
+
+// Middlewares de seguridad
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      connectSrc: ["'self'"],
+      imgSrc: ["'self'", "data:"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      fontSrc: ["'self'", "data:"]
+    }
+  }
+}));
 app.use(cors(config.security.cors));
 app.use(limiter);
 app.use(compression());
 
+// Protección contra ataques XSS
+app.use(xssProtection);
+
+// Prevenir parámetros HTTP duplicados
+app.use(hpp());
+
+// Protección contra inyección NoSQL
+app.use(mongoSanitize());
+
 // Middleware para parsear JSON
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Servir archivos estáticos (documentación)
 app.use(express.static(path.join(__dirname, 'docs')));
+
+// Agregar ID de solicitud a cada petición
+app.use((req, res, next) => {
+  req.headers['x-request-id'] = req.headers['x-request-id'] || Date.now().toString();
+  next();
+});
 
 // Conectar a MongoDB e inicializar usuario por defecto (solo si no estamos en entorno de prueba)
 if (process.env.NODE_ENV !== 'test') {
