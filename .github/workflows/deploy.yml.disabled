@@ -1,3 +1,16 @@
+# WORKFLOW DE DESPLIEGUE DESHABILITADO
+# 
+# Este archivo contiene la configuración para despliegue automático
+# pero está deshabilitado hasta configurar los secrets del servidor.
+#
+# Para habilitar:
+# 1. Renombrar este archivo a "deploy.yml"
+# 2. Configurar los siguientes secrets en GitHub:
+#    - DEPLOY_HOST: IP o dominio del servidor
+#    - DEPLOY_USER: usuario SSH del servidor  
+#    - DEPLOY_KEY: clave privada SSH
+#    - DEPLOY_PATH: ruta en el servidor donde desplegar
+
 name: Despliegue a Producción
 
 on:
