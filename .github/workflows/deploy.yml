@@ -1,0 +1,61 @@
+name: Despliegue a Producción
+
+on:
+  push:
+    branches: [ main ]
+    
+jobs:
+  deploy:
+    name: Despliegue de la aplicación
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+        
+      - name: Configurar Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+          cache: 'npm'
+          
+      - name: Instalar dependencias
+        run: npm run install:all
+        
+      - name: Ejecutar pruebas
+        run: npm test
+        
+      - name: Construir frontend
+        run: npm run build
+        
+      - name: Comprimir para despliegue
+        run: |
+          mkdir -p deploy
+          cp -r backend deploy/
+          cp -r frontend/build deploy/frontend
+          cp package.json deploy/
+          cd deploy
+          tar -czf ../deploy.tar.gz .
+          
+      - name: Desplegar a servidor
+        uses: burnett01/rsync-deployments@5.2.1
+        with:
+          switches: -avzr --delete
+          path: deploy.tar.gz
+          remote_path: ${{ secrets.DEPLOY_PATH }}
+          remote_host: ${{ secrets.DEPLOY_HOST }}
+          remote_user: ${{ secrets.DEPLOY_USER }}
+          remote_key: ${{ secrets.DEPLOY_KEY }}
+          
+      - name: Ejecutar comandos de despliegue
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH }}
+            tar -xzf deploy.tar.gz
+            rm deploy.tar.gz
+            npm install --production
+            pm2 restart refrigerios-app || pm2 start backend/server.js --name refrigerios-app 

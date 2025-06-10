@@ -1,0 +1,67 @@
+name: Pruebas Automatizadas
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Ejecutar pruebas
+    runs-on: ubuntu-latest
+    
+    services:
+      mongodb:
+        image: mongo:5.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongo --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+        
+      - name: Configurar Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+          cache: 'npm'
+          
+      - name: Instalar dependencias de backend
+        run: |
+          cd backend
+          npm ci
+          
+      - name: Ejecutar pruebas de backend
+        run: |
+          cd backend
+          npm test
+        env:
+          NODE_ENV: test
+          MONGODB_URI: mongodb://localhost:27017/test_refrigerios
+          
+      - name: Instalar dependencias de frontend
+        run: |
+          cd frontend
+          npm ci
+          
+      - name: Ejecutar pruebas de frontend
+        run: |
+          cd frontend
+          npm test -- --watchAll=false
+        env:
+          CI: true
+          
+      - name: Subir informe de cobertura
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: |
+            backend/coverage
+            frontend/coverage
+          if-no-files-found: warn 
