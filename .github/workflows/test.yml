@@ -1,14 +1,14 @@
-name: Pruebas Automatizadas
+name: Pruebas Automatizadas Completas
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
 
 jobs:
-  test:
-    name: Ejecutar pruebas
+  test-backend:
+    name: Tests Backend
     runs-on: ubuntu-latest
     
     services:
@@ -20,7 +20,7 @@ jobs:
           --health-cmd "mongo --eval 'db.runCommand({ ping: 1 })'"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 3
     
     steps:
       - name: Checkout código
@@ -31,6 +31,7 @@ jobs:
         with:
           node-version: '16'
           cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
           
       - name: Instalar dependencias de backend
         run: |
@@ -45,23 +46,101 @@ jobs:
           NODE_ENV: test
           MONGODB_URI: mongodb://localhost:27017/test_refrigerios
           
-      # Frontend tests deshabilitados temporalmente hasta configuración completa
-      # - name: Instalar dependencias de frontend
-      #   run: |
-      #     cd frontend
-      #     npm ci
-      #     
-      # - name: Ejecutar pruebas de frontend
-      #   run: |
-      #     cd frontend
-      #     npm test -- --watchAll=false
-      #   env:
-      #     CI: true
-          
-      - name: Subir informe de cobertura
+      - name: Subir informe de cobertura backend
         uses: actions/upload-artifact@v3
         with:
-          name: coverage-report
-          path: |
-            backend/coverage
-          if-no-files-found: warn 
+          name: backend-coverage
+          path: backend/coverage
+          if-no-files-found: warn
+
+  test-frontend:
+    name: Tests Frontend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+        
+      - name: Configurar Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+          
+      - name: Instalar dependencias de frontend
+        run: |
+          cd frontend
+          npm ci
+          
+      - name: Ejecutar tests de frontend
+        run: |
+          cd frontend
+          npm test -- --watchAll=false --coverage
+        env:
+          CI: true
+          
+      - name: Build del frontend
+        run: |
+          cd frontend
+          npm run build
+        env:
+          CI: false
+          
+      - name: Subir informe de cobertura frontend
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+          if-no-files-found: warn
+
+  integration-test:
+    name: Tests de Integración
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    
+    services:
+      mongodb:
+        image: mongo:5.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongo --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 3
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+        
+      - name: Configurar Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+          cache: 'npm'
+          
+      - name: Instalar dependencias
+        run: npm run install:all
+        
+      - name: Build del frontend
+        run: npm run build
+        
+      - name: Test de integración básica
+        run: |
+          # Iniciar el backend en background
+          cd backend
+          npm start &
+          BACKEND_PID=$!
+          
+          # Esperar que el backend inicie
+          sleep 10
+          
+          # Test básico de conectividad
+          curl -f http://localhost:3001/api/status || exit 1
+          
+          # Matar el proceso del backend
+          kill $BACKEND_PID
+        env:
+          NODE_ENV: test
+          MONGODB_URI: mongodb://localhost:27017/test_integration 
