@@ -17,6 +17,15 @@ const config = {
       maxPoolSize: 10
     }
   },
+  
+  api: {
+    turnos: {
+      url: process.env.API_TURNOS_URL || 'https://api.ejemplo.com/turnos',
+      apiKey: process.env.API_TURNOS_KEY || '',
+      timeout: parseInt(process.env.API_TIMEOUT || '10000'),
+      habilitada: process.env.API_HABILITADA === 'true'
+    }
+  },
 
   security: {
     jwtSecret: process.env.JWT_SECRET || 'tu-secreto-jwt-super-seguro',

@@ -8,6 +8,7 @@ const Turno = require('../modelos/Turno');
 const { parse, format, isValid } = require('date-fns');
 // const { es } = require('date-fns/locale');
 const mongoose = require('mongoose');
+const apiService = require('../servicios/apiService'); // Importar el nuevo servicio de API
 
 // --- ELIMINAR Lógica de Cálculo Duplicada --- 
 /*
@@ -22,24 +23,14 @@ exports.crearTurnos = async (req, res) => {
   res.status(404).json({ mensaje: "Endpoint obsoleto." });
 };
 
-// GET /api/asesores?fecha=YYYY-MM-DD (Calculo Dinámico V10)
+// GET /api/asesores?fecha=YYYY-MM-DD (Calculo Dinámico V11 con API)
 exports.obtenerTurnos = async (req, res) => {
-    console.log('[Controlador V10 - Asesor] Hit GET /api/asesores');
-    console.log('[Controlador V10 - Asesor] Base de datos MongoDB conectada:', mongoose.connection.db.databaseName);
+    console.log('[Controlador V11 - Asesor] Hit GET /api/asesores');
     const { fecha } = req.query;
-    console.log(`[Controlador V10 - Asesor] req.query recibido: ${JSON.stringify(req.query)}`);
+    console.log(`[Controlador V11 - Asesor] req.query recibido: ${JSON.stringify(req.query)}`);
     
-    // Verificación directa para depurar
-    console.log('[DEBUG] Intentando consulta directa a la base de datos');
-    try {
-        const turnosDirectos = await mongoose.connection.db.collection('turnos').find().limit(1).toArray();
-        console.log(`[DEBUG] Consulta directa: ${turnosDirectos.length > 0 ? 'OK' : 'Sin resultados'}`);
-    } catch (dbError) {
-        console.error('[DEBUG] Error en consulta directa:', dbError);
-    }
-
     if (!fecha) {
-        console.log('[Controlador V10 - Asesor] No se proporcionó fecha. Devolviendo vacío.');
+        console.log('[Controlador V11 - Asesor] No se proporcionó fecha. Devolviendo vacío.');
         return res.json([]);
     }
 
@@ -48,7 +39,7 @@ exports.obtenerTurnos = async (req, res) => {
         const fechaNormalizada = normalizarFecha(fecha);
         
         if (!fechaNormalizada) {
-         console.error(`[Controlador V10 - Asesor] Formato de fecha inválido: ${fecha}`);
+         console.error(`[Controlador V11 - Asesor] Formato de fecha inválido: ${fecha}`);
          return res.status(400).json({ mensaje: 'Formato de fecha inválido. Use YYYY-MM-DD.' });
         }
         
@@ -62,34 +53,92 @@ exports.obtenerTurnos = async (req, res) => {
             
             if (diaSemana === 0) {
                 tipoDiaBusqueda = 'Domingo';
-                console.log(`[Controlador V10 - Asesor] La fecha ${fechaNormalizada} corresponde a un DOMINGO`);
+                console.log(`[Controlador V11 - Asesor] La fecha ${fechaNormalizada} corresponde a un DOMINGO`);
             } else if (diaSemana === 6) {
                 tipoDiaBusqueda = 'Sábado';
-                console.log(`[Controlador V10 - Asesor] La fecha ${fechaNormalizada} corresponde a un SÁBADO`);
+                console.log(`[Controlador V11 - Asesor] La fecha ${fechaNormalizada} corresponde a un SÁBADO`);
             }
         }
         
-        // DEPURACIÓN ESPECIAL para 2025-05-08
-        if (fechaNormalizada === '2025-05-08') {
-            console.log('[DEBUG ESPECIAL] Buscando para la fecha 2025-05-08');
-            // Verificar directamente en la colección
-            const turnosDirectos = await mongoose.connection.db.collection('turnos').find({fecha: '2025-05-08'}).toArray();
-            console.log(`[DEBUG ESPECIAL] Encontrados ${turnosDirectos.length} turnos directamente en colección 'turnos'`);
+        // 2. Intentar obtener datos desde la API externa
+        console.log(`[Controlador V11 - Asesor] Intentando obtener datos desde API externa para fecha: ${fechaNormalizada}`);
+        
+        try {
+            const turnosDesdeApi = await apiService.obtenerTurnosDeApi(fechaNormalizada);
             
-            // Verificar cuántos tienen horario completo
-            const turnosConHorario = turnosDirectos.filter(t => t.horaInicioReal && t.horaFinReal);
-            console.log(`[DEBUG ESPECIAL] De ellos, ${turnosConHorario.length} tienen horario completo (inicio y fin)`);
-            
-            // Verificar otros formatos de fecha
-            const otrosFormatos = ['08/05/2025', '8/5/2025', '05/08/2025', '5/8/2025'];
-            for (const formato of otrosFormatos) {
-                const count = await mongoose.connection.db.collection('turnos').countDocuments({fecha: formato});
-                if (count > 0) {
-                    console.log(`[DEBUG ESPECIAL] Encontrados ${count} turnos con fecha en formato ${formato}`);
-                }
+            if (turnosDesdeApi && turnosDesdeApi.length > 0) {
+                console.log(`[Controlador V11 - Asesor] Se obtuvieron ${turnosDesdeApi.length} turnos desde la API externa`);
+                
+                // Preparar datos para el calculador
+                const datosParaCalculador = turnosDesdeApi.map(turno => ({
+                    _id: turno._id,
+                    nombreAsesor: turno.nombre,
+                    fecha: turno.turnoFecha,
+                    horario: turno.horario,
+                    primerRefrigerio: turno.primerRefrigerio,
+                    segundoRefrigerio: turno.segundoRefrigerio,
+                    _horaInicioParaCalculo: turno.horaInicioReal
+                }));
+                
+                // Calcular refrigerios dinámicamente
+                const turnosConRefrigeriosCalculados = calcularRefrigeriosBackend(datosParaCalculador);
+                
+                // Mapear a la estructura esperada por el frontend
+                const asesoresParaFrontend = turnosConRefrigeriosCalculados
+                    .filter(turno => {
+                        if (!turno.horaInicioReal || !turno.horaFinReal) {
+                            if (turno.motivo && turno.motivo.toLowerCase().includes('jornada normal')) {
+                                console.log(`[Controlador V11 - Asesor] ADVERTENCIA: Asesor ${turno.nombreAsesor || turno.nombre} con motivo "jornada normal" sin horario completo`);
+                            }
+                            return false;
+                        }
+                        return true;
+                    })
+                    .map(turno => {
+                        let horarioFormateado = '';
+                        
+                        if (turno.horaInicioReal && turno.horaFinReal) {
+                            horarioFormateado = `${turno.horaInicioReal} a ${turno.horaFinReal}`;
+                        } else if (turno._horaInicioParaCalculo) {
+                            const horaFin = calcularHoraFin(turno._horaInicioParaCalculo);
+                            horarioFormateado = `${turno._horaInicioParaCalculo} a ${horaFin || '?'}`;
+                        }
+                        
+                        return {
+                            id: turno._id,
+                            nombreAsesor: turno.nombreAsesor || turno.nombre,
+                            horario: horarioFormateado,
+                            primerRefrigerio: turno.primerRefrigerio,
+                            segundoRefrigerio: turno.segundoRefrigerio,
+                            tipoDia: turno.tipoDia || tipoDiaBusqueda,
+                            fuenteDatos: 'api' // Indicar que los datos vienen de la API
+                        };
+                    });
+                
+                // Ordenar por hora de inicio
+                asesoresParaFrontend.sort((a, b) => {
+                    const startTimeA = a.horario?.match(/^(\d{2}):(\d{2})/);
+                    const startTimeB = b.horario?.match(/^(\d{2}):(\d{2})/);
+                    
+                    const minutesA = startTimeA ? (parseInt(startTimeA[1]) * 60 + parseInt(startTimeA[2])) : 9999;
+                    const minutesB = startTimeB ? (parseInt(startTimeB[1]) * 60 + parseInt(startTimeB[2])) : 9999;
+                    
+                    return minutesA - minutesB;
+                });
+                
+                console.log(`[Controlador V11 - Asesor] Enviando ${asesoresParaFrontend.length} turnos con refrigerios calculados desde API externa.`);
+                return res.json(asesoresParaFrontend);
+            } else {
+                console.log('[Controlador V11 - Asesor] No se obtuvieron datos desde la API externa. Buscando en base de datos local.');
             }
+        } catch (apiError) {
+            console.error('[Controlador V11 - Asesor] Error al obtener datos de la API externa:', apiError.message);
+            console.log('[Controlador V11 - Asesor] Continuando con búsqueda en base de datos local...');
         }
-
+        
+        // 3. Si no hay datos de la API, buscar en la colección Asesor
+        console.log(`[Controlador V11 - Asesor] Buscando turnos base en 'Asesor' para turnoFecha: ${fechaNormalizada}`);
+        
         // Crear patrones de búsqueda para diferentes formatos de fecha
         const fechaPartes = fechaNormalizada.split('-');
         const año = fechaPartes[0];
@@ -104,10 +153,7 @@ exports.obtenerTurnos = async (req, res) => {
             `${mes}-${dia}-${año}` // MM-DD-YYYY
         ];
         
-        console.log(`[Controlador V10 - Asesor] Patrones de fecha para búsqueda: ${patronesFecha.join(', ')}`);
-        
-        // 2. Buscar en la colección Asesor
-        console.log(`[Controlador V10 - Asesor] Buscando turnos base en 'Asesor' para turnoFecha: ${fechaNormalizada}`);
+        console.log(`[Controlador V11 - Asesor] Patrones de fecha para búsqueda: ${patronesFecha.join(', ')}`);
         
         // Buscar en la colección de Asesor
         const asesores = await Asesor.find({ 
@@ -115,7 +161,7 @@ exports.obtenerTurnos = async (req, res) => {
         }).select('_id nombre horario horaInicioReal turnoFecha primerRefrigerio segundoRefrigerio').lean();
         
         if (asesores && asesores.length > 0) {
-            console.log(`[Controlador V10 - Asesor] ${asesores.length} turnos base encontrados en Asesor para ${fechaNormalizada}. Calculando refrigerios...`);
+            console.log(`[Controlador V11 - Asesor] ${asesores.length} turnos base encontrados en Asesor para ${fechaNormalizada}. Calculando refrigerios...`);
             
             // Preparar datos para el calculador
             const datosParaCalculador = asesores.map(turno => ({
@@ -139,7 +185,7 @@ exports.obtenerTurnos = async (req, res) => {
                     if (!turno.horaInicioReal || !turno.horaFinReal) {
                         // Si el motivo es "jornada normal" pero falta alguna hora, registrar advertencia
                         if (turno.motivo && turno.motivo.toLowerCase().includes('jornada normal')) {
-                            console.log(`[Controlador V10 - Asesor] ADVERTENCIA: Asesor ${turno.nombreAsesor || turno.nombre} con motivo "jornada normal" sin horario completo`);
+                            console.log(`[Controlador V11 - Asesor] ADVERTENCIA: Asesor ${turno.nombreAsesor || turno.nombre} con motivo "jornada normal" sin horario completo`);
                         }
                         // Excluir este registro
                         return false;
@@ -166,7 +212,8 @@ exports.obtenerTurnos = async (req, res) => {
                         horario: horarioFormateado,
                         primerRefrigerio: turno.primerRefrigerio,
                         segundoRefrigerio: turno.segundoRefrigerio,
-                        tipoDia: turno.tipoDia || tipoDiaBusqueda // Usar el tipo de día del turno o el detectado
+                        tipoDia: turno.tipoDia || tipoDiaBusqueda, // Usar el tipo de día del turno o el detectado
+                        fuenteDatos: 'local' // Indicar que los datos vienen de la base de datos local
                     };
                 });
             
@@ -183,12 +230,12 @@ exports.obtenerTurnos = async (req, res) => {
                 return minutesA - minutesB;
             });
             
-            console.log(`[Controlador V10 - Asesor] Enviando ${asesoresParaFrontend.length} turnos con refrigerios calculados desde colección Asesor.`);
+            console.log(`[Controlador V11 - Asesor] Enviando ${asesoresParaFrontend.length} turnos con refrigerios calculados desde colección Asesor.`);
             return res.json(asesoresParaFrontend);
         }
         
-        // 3. Si no hay resultados en Asesor, buscar en la colección Turno
-        console.log(`[Controlador V10 - Asesor] No se encontraron turnos base en Asesor para turnoFecha ${fechaNormalizada}. Buscando en Turno...`);
+        // 4. Si no hay resultados en Asesor, buscar en la colección Turno
+        console.log(`[Controlador V11 - Asesor] No se encontraron turnos base en Asesor para turnoFecha ${fechaNormalizada}. Buscando en Turno...`);
         
         // Buscar turnos con cualquiera de los patrones de fecha
         const turnos = await Turno.find({
@@ -200,7 +247,7 @@ exports.obtenerTurnos = async (req, res) => {
         
         // Si hay resultados en Turno, procesarlos
         if (turnos && turnos.length > 0) {
-            console.log(`[Controlador V10 - Asesor] Encontrados ${turnos.length} turnos en colección Turno para fecha ${fechaNormalizada}.`);
+            console.log(`[Controlador V11 - Asesor] Encontrados ${turnos.length} turnos en colección Turno para fecha ${fechaNormalizada}.`);
             
             // Convertir documentos de Turno a formato para calculador
             const datosParaCalculador = turnos.map(turno => ({
@@ -233,7 +280,7 @@ exports.obtenerTurnos = async (req, res) => {
                     if (!turno.horaInicioReal || !turno.horaFinReal) {
                         // Si el motivo es "jornada normal" pero falta alguna hora, registrar advertencia
                         if (turno.motivo && turno.motivo.toLowerCase().includes('jornada normal')) {
-                            console.log(`[Controlador V10 - Asesor] ADVERTENCIA: Asesor ${turno.nombreAsesor || turno.nombre} con motivo "jornada normal" sin horario completo`);
+                            console.log(`[Controlador V11 - Asesor] ADVERTENCIA: Asesor ${turno.nombreAsesor || turno.nombre} con motivo "jornada normal" sin horario completo`);
                         }
                         // Excluir este registro
                         return false;
@@ -260,7 +307,8 @@ exports.obtenerTurnos = async (req, res) => {
                         horario: horarioFormateado,
                         primerRefrigerio: turno.primerRefrigerio,
                         segundoRefrigerio: turno.segundoRefrigerio,
-                        tipoDia: turno.tipoDia || tipoDiaBusqueda // Usar el tipo de día del turno o el detectado
+                        tipoDia: turno.tipoDia || tipoDiaBusqueda, // Usar el tipo de día del turno o el detectado
+                        fuenteDatos: 'local' // Indicar que los datos vienen de la base de datos local
                     };
                 });
             
@@ -277,260 +325,16 @@ exports.obtenerTurnos = async (req, res) => {
                 return minutesA - minutesB;
             });
             
-            console.log(`[Controlador V10 - Asesor] Enviando ${asesoresParaFrontend.length} turnos con refrigerios calculados desde colección Turno.`);
-            return res.json(asesoresParaFrontend);
-        }
-        
-        // 4. Si no se encontraron resultados, intentar búsqueda directa en la colección
-        console.log(`[Controlador V10 - Asesor] No se encontraron turnos con patrones. Intentando búsqueda directa en la colección 'turnos'...`);
-        
-        const turnosDirectos = await mongoose.connection.db.collection('turnos')
-            .find({ fecha: { $in: patronesFecha } })
-            .toArray();
-        
-        // Variable para almacenar los turnos encontrados por cualquier método
-        let turnosDB = [];
-        
-        if (turnosDirectos && turnosDirectos.length > 0) {
-            turnosDB = turnosDirectos;
-            console.log(`[Controlador V10 - Asesor] Encontrados ${turnosDirectos.length} turnos mediante búsqueda directa`);
-            
-            // Convertir documentos a formato para calculador
-            const datosParaCalculador = turnosDirectos.map(turno => ({
-                _id: turno._id,
-                nombreAsesor: turno.nombre || turno.asesor?.nombre || '',
-                fecha: fechaNormalizada,
-                horario: turno.horario || `${turno.horaInicioReal || ''} a ${turno.horaFinReal || ''}`,
-                _horaInicioParaCalculo: turno.horaInicioReal || turno.turno?.horario?.inicio || '',
-                horaInicioReal: turno.horaInicioReal,
-                horaFinReal: turno.horaFinReal,
-                primerRefrigerio: turno.refrigerios && turno.refrigerios[0] ? turno.refrigerios[0].horario.inicio : 'N/A',
-                segundoRefrigerio: turno.refrigerios && turno.refrigerios[1] ? turno.refrigerios[1].horario.inicio : 'N/A'
-            }));
-            
-            console.log(`[DEBUG] Datos para calculador (directos): ${datosParaCalculador.length}`);
-            console.log(`[DEBUG] Muestra de dato para calculador (directo): ${JSON.stringify(datosParaCalculador[0], null, 2)}`);
-            
-            // Calcular/validar refrigerios
-            const turnosConRefrigeriosCalculados = calcularRefrigeriosBackend(datosParaCalculador);
-            
-            console.log(`[DEBUG] Turnos después del cálculo (directos): ${turnosConRefrigeriosCalculados.length}`);
-            console.log(`[DEBUG] Muestra después del cálculo (directo): ${JSON.stringify(turnosConRefrigeriosCalculados[0], null, 2)}`);
-            console.log(`[DEBUG] Turnos con horario completo después del cálculo (directos): ${turnosConRefrigeriosCalculados.filter(t => t.horaInicioReal && t.horaFinReal).length}`);
-            
-            // Mapear a la estructura esperada por el frontend
-            const asesoresParaFrontend = turnosConRefrigeriosCalculados
-                // Filtrar solo los asesores que tienen un horario asignado
-                .filter(turno => {
-                    // Solo incluir asesores con horario de inicio y fin (que realmente están dimensionados)
-                    if (!turno.horaInicioReal || !turno.horaFinReal) {
-                        // Si el motivo es "jornada normal" pero falta alguna hora, registrar advertencia
-                        if (turno.motivo && turno.motivo.toLowerCase().includes('jornada normal')) {
-                            console.log(`[Controlador V10 - Asesor] ADVERTENCIA: Asesor ${turno.nombreAsesor || turno.nombre} con motivo "jornada normal" sin horario completo`);
-                        }
-                        // Excluir este registro
-                        return false;
-                    }
-                    return true;
-                })
-                // Convertir a formato para frontend
-                .map(turno => {
-                    // Asegurar que el horario tenga el formato correcto "HH:MM a HH:MM"
-                    let horarioFormateado = '';
-                    
-                    // Si tenemos hora de inicio y fin, construir el formato correcto
-                    if (turno.horaInicioReal && turno.horaFinReal) {
-                        horarioFormateado = `${turno.horaInicioReal} a ${turno.horaFinReal}`;
-                    } else if (turno._horaInicioParaCalculo) {
-                        // Fallback: si solo tenemos hora de inicio, estimar hora de fin
-                        const horaFin = calcularHoraFin(turno._horaInicioParaCalculo);
-                        horarioFormateado = `${turno._horaInicioParaCalculo} a ${horaFin || '?'}`;
-                    }
-                    
-                    return {
-                        id: turno._id,
-                        nombreAsesor: turno.nombreAsesor || turno.nombre,
-                        horario: horarioFormateado,
-                        primerRefrigerio: turno.primerRefrigerio,
-                        segundoRefrigerio: turno.segundoRefrigerio,
-                        tipoDia: turno.tipoDia || tipoDiaBusqueda // Usar el tipo de día del turno o el detectado
-                    };
-                });
-            
-            // Ordenar por hora de inicio
-            asesoresParaFrontend.sort((a, b) => {
-                // Extraer horas y minutos del formato "HH:MM a HH:MM"
-                const startTimeA = a.horario?.match(/^(\d{2}):(\d{2})/);
-                const startTimeB = b.horario?.match(/^(\d{2}):(\d{2})/);
-                
-                // Convertir a minutos para comparación
-                const minutesA = startTimeA ? (parseInt(startTimeA[1]) * 60 + parseInt(startTimeA[2])) : 9999;
-                const minutesB = startTimeB ? (parseInt(startTimeB[1]) * 60 + parseInt(startTimeB[2])) : 9999;
-                
-                return minutesA - minutesB;
-            });
-            
-            console.log(`[Controlador V10 - Asesor] Enviando ${asesoresParaFrontend.length} turnos con refrigerios calculados desde búsqueda directa.`);
-            return res.json(asesoresParaFrontend);
-        }
-        
-        // Si no hay resultados en Asesor ni en Turno con los patrones de fecha, 
-        // intentar buscar turnos que coincidan con el día de la semana (para días no hábiles)
-        if (turnosDB.length === 0) {
-            console.log(`[Controlador V10 - Asesor] No se encontraron turnos con patrones. Intentando buscar por día de la semana...`);
-            
-            // Determinar si la fecha corresponde a un fin de semana o día especial
-            const fechaObj = parse(fechaNormalizada, 'yyyy-MM-dd', new Date());
-            if (isValid(fechaObj)) {
-                const diaSemana = fechaObj.getDay(); // 0 = Domingo, 6 = Sábado
-                let tipoDiaBusqueda = 'Regular';
-                
-                if (diaSemana === 0) {
-                    tipoDiaBusqueda = 'Domingo';
-                    console.log(`[Controlador V10 - Asesor] La fecha ${fechaNormalizada} corresponde a un DOMINGO`);
-                } else if (diaSemana === 6) {
-                    tipoDiaBusqueda = 'Sábado';
-                    console.log(`[Controlador V10 - Asesor] La fecha ${fechaNormalizada} corresponde a un SÁBADO`);
-                }
-                
-                // Primero buscar por tipo de día específico (Sábado o Domingo)
-                if (tipoDiaBusqueda !== 'Regular') {
-                    console.log(`[Controlador V10 - Asesor] Buscando turnos para día tipo: ${tipoDiaBusqueda}`);
-                    turnosDB = await Turno.find({ 
-                        tipoDia: tipoDiaBusqueda,
-                        mes: parseInt(fechaPartes[1]),
-                        anio: parseInt(fechaPartes[0])
-                    });
-                    
-                    if (turnosDB.length > 0) {
-                        console.log(`[Controlador V10 - Asesor] Encontrados ${turnosDB.length} turnos para día tipo ${tipoDiaBusqueda}`);
-                    } else {
-                        // Si no se encontró nada, intentar con tipoDia = 'Feriado'
-                        console.log(`[Controlador V10 - Asesor] No se encontraron turnos para día tipo ${tipoDiaBusqueda}. Intentando con Feriado...`);
-                        turnosDB = await Turno.find({ 
-                            tipoDia: 'Feriado',
-                            mes: parseInt(fechaPartes[1]),
-                            anio: parseInt(fechaPartes[0])
-                        });
-                        
-                        if (turnosDB.length > 0) {
-                            console.log(`[Controlador V10 - Asesor] Encontrados ${turnosDB.length} turnos con tipo de día Feriado`);
-                            tipoDiaBusqueda = 'Feriado';
-                        }
-                    }
-                    
-                    // También buscar en la colección 'turnos' directamente
-                    if (turnosDB.length === 0) {
-                        console.log(`[Controlador V10 - Asesor] Intentando búsqueda directa en colección para días no hábiles...`);
-                        
-                        // Buscar directamente en la colección de turnos
-                        const turnosColeccion = await mongoose.connection.db.collection('turnos').find({
-                            $or: [
-                                { tipoDia: tipoDiaBusqueda },
-                                { tipoDia: 'Feriado' },
-                                { 'turno.tipo': 'NO_HABIL' },
-                                { 'turno.tipo': 'FIN_SEMANA' }
-                            ],
-                            mes: parseInt(fechaPartes[1]),
-                            anio: parseInt(fechaPartes[0])
-                        }).toArray();
-                        
-                        if (turnosColeccion.length > 0) {
-                            console.log(`[Controlador V10 - Asesor] Encontrados ${turnosColeccion.length} turnos no hábiles en la colección`);
-                            turnosDB = turnosColeccion;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Procesar los turnos encontrados (si los hay)
-        if (turnosDB && turnosDB.length > 0) {
-            // Convertir documentos de Turno a formato para calculador
-            const datosParaCalculador = turnosDB.map(turno => ({
-                _id: turno._id,
-                nombreAsesor: turno.nombre || turno.asesor?.nombre || '',
-                fecha: fechaNormalizada,
-                horario: turno.horario || `${turno.horaInicioReal || ''} a ${turno.horaFinReal || ''}`,
-                _horaInicioParaCalculo: turno.horaInicioReal || turno.turno?.horario?.inicio || '',
-                horaInicioReal: turno.horaInicioReal,
-                horaFinReal: turno.horaFinReal,
-                primerRefrigerio: turno.refrigerios && turno.refrigerios[0] ? turno.refrigerios[0].horario.inicio : 'N/A',
-                segundoRefrigerio: turno.refrigerios && turno.refrigerios[1] ? turno.refrigerios[1].horario.inicio : 'N/A'
-            }));
-            
-            console.log(`[DEBUG] Datos para calculador: ${datosParaCalculador.length}`);
-            console.log(`[DEBUG] Muestra de dato para calculador: ${JSON.stringify(datosParaCalculador[0], null, 2)}`);
-            
-            // Calcular/validar refrigerios
-            const turnosConRefrigeriosCalculados = calcularRefrigeriosBackend(datosParaCalculador);
-            
-            console.log(`[DEBUG] Turnos después del cálculo: ${turnosConRefrigeriosCalculados.length}`);
-            console.log(`[DEBUG] Muestra después del cálculo: ${JSON.stringify(turnosConRefrigeriosCalculados[0], null, 2)}`);
-            console.log(`[DEBUG] Turnos con horario completo después del cálculo: ${turnosConRefrigeriosCalculados.filter(t => t.horaInicioReal && t.horaFinReal).length}`);
-            
-            // Mapear a la estructura esperada por el frontend
-            const asesoresParaFrontend = turnosConRefrigeriosCalculados
-                // Filtrar solo los asesores que tienen un horario asignado
-                .filter(turno => {
-                    // Solo incluir asesores con horario de inicio y fin (que realmente están dimensionados)
-                    if (!turno.horaInicioReal || !turno.horaFinReal) {
-                        // Si el motivo es "jornada normal" pero falta alguna hora, registrar advertencia
-                        if (turno.motivo && turno.motivo.toLowerCase().includes('jornada normal')) {
-                            console.log(`[Controlador V10 - Asesor] ADVERTENCIA: Asesor ${turno.nombreAsesor || turno.nombre} con motivo "jornada normal" sin horario completo`);
-                        }
-                        // Excluir este registro
-                        return false;
-                    }
-                    return true;
-                })
-                // Convertir a formato para frontend
-                .map(turno => {
-                    // Asegurar que el horario tenga el formato correcto "HH:MM a HH:MM"
-                    let horarioFormateado = '';
-                    
-                    // Si tenemos hora de inicio y fin, construir el formato correcto
-                    if (turno.horaInicioReal && turno.horaFinReal) {
-                        horarioFormateado = `${turno.horaInicioReal} a ${turno.horaFinReal}`;
-                    } else if (turno._horaInicioParaCalculo) {
-                        // Fallback: si solo tenemos hora de inicio, estimar hora de fin
-                        const horaFin = calcularHoraFin(turno._horaInicioParaCalculo);
-                        horarioFormateado = `${turno._horaInicioParaCalculo} a ${horaFin || '?'}`;
-                    }
-                    
-                    return {
-                        id: turno._id,
-                        nombreAsesor: turno.nombreAsesor || turno.nombre,
-                        horario: horarioFormateado,
-                        primerRefrigerio: turno.primerRefrigerio,
-                        segundoRefrigerio: turno.segundoRefrigerio,
-                        tipoDia: turno.tipoDia || tipoDiaBusqueda // Usar el tipo de día del turno o el detectado
-                    };
-                });
-            
-            // Ordenar por hora de inicio
-            asesoresParaFrontend.sort((a, b) => {
-                // Extraer horas y minutos del formato "HH:MM a HH:MM"
-                const startTimeA = a.horario?.match(/^(\d{2}):(\d{2})/);
-                const startTimeB = b.horario?.match(/^(\d{2}):(\d{2})/);
-                
-                // Convertir a minutos para comparación
-                const minutesA = startTimeA ? (parseInt(startTimeA[1]) * 60 + parseInt(startTimeA[2])) : 9999;
-                const minutesB = startTimeB ? (parseInt(startTimeB[1]) * 60 + parseInt(startTimeB[2])) : 9999;
-                
-                return minutesA - minutesB;
-            });
-            
-            console.log(`[Controlador V10 - Asesor] Enviando ${asesoresParaFrontend.length} turnos para día no hábil`);
+            console.log(`[Controlador V11 - Asesor] Enviando ${asesoresParaFrontend.length} turnos con refrigerios calculados desde colección Turno.`);
             return res.json(asesoresParaFrontend);
         }
         
         // 5. No se encontraron datos en ninguna colección
-        console.log(`[Controlador V10 - Asesor] No se encontraron turnos para fecha ${fechaNormalizada} en ninguna colección.`);
+        console.log(`[Controlador V11 - Asesor] No se encontraron turnos para fecha ${fechaNormalizada} en ninguna colección.`);
         return res.json([]);
         
     } catch (error) {
-        console.error(`[Controlador V10 - Asesor] Error al obtener y calcular turnos para ${fecha}:`, error);
+        console.error(`[Controlador V11 - Asesor] Error al obtener y calcular turnos para ${fecha}:`, error);
         res.status(500).json({ mensaje: 'Error interno al obtener los turnos' });
     }
 };

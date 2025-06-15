@@ -1,0 +1,66 @@
+[
+  {
+    "id": "asesor-001",
+    "nombre": "Juan Pérez",
+    "fecha": "2023-05-10",
+    "horario": "08:00 a 17:00",
+    "primerRefrigerio": "12:00",
+    "segundoRefrigerio": "15:00"
+  },
+  {
+    "id": "asesor-002",
+    "nombre": "María López",
+    "fecha": "2023-05-10",
+    "horario": "09:00 a 18:00",
+    "primerRefrigerio": "13:00",
+    "segundoRefrigerio": "16:00"
+  },
+  {
+    "id": "asesor-003",
+    "nombre": "Carlos Rodríguez",
+    "fecha": "2023-05-10",
+    "horario": "07:00 a 16:00",
+    "primerRefrigerio": "11:00",
+    "segundoRefrigerio": "14:00"
+  },
+  {
+    "id": "asesor-004",
+    "nombre": "Ana Martínez",
+    "fecha": "2023-05-10",
+    "horario": "10:00 a 19:00",
+    "primerRefrigerio": "14:00",
+    "segundoRefrigerio": "17:00"
+  },
+  {
+    "id": "asesor-005",
+    "nombre": "Luis Sánchez",
+    "fecha": "2023-05-10",
+    "horario": "12:00 a 21:00",
+    "primerRefrigerio": "16:00",
+    "segundoRefrigerio": "19:00"
+  },
+  {
+    "id": "asesor-006",
+    "nombreAsesor": "Patricia González",
+    "turnoFecha": "2023-05-10",
+    "horario": "14:00 a 23:00",
+    "primerRefrigerio": "18:00",
+    "segundoRefrigerio": "21:00"
+  },
+  {
+    "id": "asesor-007",
+    "nombreAsesor": "Roberto Díaz",
+    "turnoFecha": "2023-05-10",
+    "horario": "06:00 a 15:00",
+    "primerRefrigerio": "10:00",
+    "segundoRefrigerio": "13:00"
+  },
+  {
+    "id": "asesor-008",
+    "nombreAsesor": "Sofía Ramírez",
+    "turnoFecha": "2023-05-10",
+    "horario": "16:00 a 01:00",
+    "primerRefrigerio": "20:00",
+    "segundoRefrigerio": "23:00"
+  }
+] 

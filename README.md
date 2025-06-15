@@ -10,6 +10,7 @@ Este sistema permite gestionar y optimizar la asignación de refrigerios para as
 - Análisis de distribución de refrigerios
 - Integración con Google Gemini AI para análisis avanzado de datos
 - Utiliza Gemini 2.5 Pro Experimental (versión 03-25) con capacidad para analizar grandes volúmenes de datos
+- Integración con APIs externas para obtención de datos de turnos
 
 ## Tecnologías
 
@@ -86,6 +87,12 @@ CORS_ORIGIN=http://localhost:3000
 
 # API de Gemini
 GEMINI_API_KEY=tu-api-key-de-gemini
+
+# API Externa de Turnos
+API_TURNOS_URL=https://api.ejemplo.com/turnos
+API_TURNOS_KEY=tu-api-key-para-turnos
+API_TIMEOUT=10000
+API_HABILITADA=false
 ```
 
 ### Base de datos
@@ -122,6 +129,36 @@ Para obtener una API key:
 3. Genera una API key en la sección de API Keys
 
 El sistema utiliza el modelo `gemini-2.5-pro-exp-03-25`, la versión experimental de Gemini 2.5 Pro, que ofrece capacidades avanzadas de análisis de datos y procesamiento de texto con una cuota gratuita disponible.
+
+### API Externa de Turnos
+
+El sistema ahora puede obtener datos de turnos desde una API externa. Para configurar esta integración:
+
+1. Configura las siguientes variables en el archivo `.env`:
+   ```
+   API_TURNOS_URL=https://api.ejemplo.com/turnos
+   API_TURNOS_KEY=tu-api-key-para-turnos
+   API_TIMEOUT=10000
+   API_HABILITADA=true
+   ```
+
+2. Asegúrate de que la API externa devuelva datos en un formato compatible con el sistema. La estructura esperada es:
+   ```json
+   [
+     {
+       "id": "identificador-unico",
+       "nombre": "Nombre del Asesor",
+       "fecha": "2023-05-10",
+       "horario": "08:00 a 17:00",
+       "primerRefrigerio": "12:00",
+       "segundoRefrigerio": "15:00"
+     }
+   ]
+   ```
+
+3. Activa la integración cambiando `API_HABILITADA=true` en el archivo `.env`.
+
+El sistema intentará primero obtener los datos desde la API externa. Si no es posible (porque la API está desactivada, no responde o devuelve un error), utilizará automáticamente los datos almacenados en la base de datos local.
 
 ## Ejecución
 

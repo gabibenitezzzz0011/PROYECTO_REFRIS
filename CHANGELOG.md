@@ -8,6 +8,12 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 ## [Unreleased]
 
 ### Añadido
+- Integración con API externa para obtención de datos de turnos
+- Servicio apiService.js para conectarse a APIs externas
+- Configuración para API externa en config.js y variables de entorno
+- Pruebas unitarias para el servicio de API
+- Documentación sobre la integración con APIs externas
+- Ejemplo de formato de datos esperado de la API externa
 - Dockerización completa del proyecto (frontend, backend y MongoDB)
 - Archivo docker-compose.yml para facilitar el despliegue
 - Archivo env.example con todas las variables de entorno necesarias
@@ -18,6 +24,8 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - Script para realizar copias de seguridad de MongoDB
 
 ### Modificado
+- Actualizado el controlador de asesores para usar API externa como fuente de datos primaria
+- Mejorado el flujo de obtención de datos con fallback a base de datos local
 - Mejorada la configuración de CORS para mayor seguridad
 - Actualizada la gestión de tokens JWT en el frontend
 - Mejorado el manejo de errores en el backend
